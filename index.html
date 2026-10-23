@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Tkallem: cut the pauses out of your audio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&family=Instrument+Sans:wght@400;600&family=Reem+Kufi:wght@600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+    <style>
+      :root {
+        --bg: #eef0fb;
+        --panel: #fff;
+        --ink: #16163f;
+        --mute: #565a85;
+        --brand: #2b3be5;
+        --on: #fff;
+        --cut: #e2338a;
+        --line: #d3d7f2;
+        --band: #2b3be5;
+        color-scheme: light;
+        box-sizing: border-box;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #0e0f2e;
+          --panel: #171949;
+          --ink: #eceeff;
+          --mute: #a0a5d8;
+          --brand: #7c88ff;
+          --on: #0e0f2e;
+          --cut: #ff5caa;
+          --line: #2c2f6c;
+          --band: #1b1e86;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #0e0f2e;
+        --panel: #171949;
+        --ink: #eceeff;
+        --mute: #a0a5d8;
+        --brand: #7c88ff;
+        --on: #0e0f2e;
+        --cut: #ff5caa;
+        --line: #2c2f6c;
+        --band: #1b1e86;
+        color-scheme: dark;
+      }
+      html {
+        scroll-padding-top: env(safe-area-inset-top, 0px);
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: inherit;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          16px/1.5 "Instrument Sans",
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      :focus-visible {
+        outline: 3px solid var(--cut);
+        outline-offset: 2px;
+      }
+      .top {
+        background: var(--band);
+        color: #fff;
+        padding: clamp(28px, 6vw, 64px) clamp(18px, 5vw, 56px);
+      }
+      h1 {
+        margin: 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.1em 0.35em;
+        font:
+          800 clamp(3.2rem, 12vw, 7.5rem)/1 "Bricolage Grotesque",
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+        letter-spacing: -0.03em;
+      }
+      .ar {
+        font:
+          600 0.8em/1 "Reem Kufi",
+          "Segoe UI",
+          Tahoma,
+          sans-serif;
+        letter-spacing: 0;
+        color: #ffb3d9;
+      }
+      .top p {
+        max-width: 46ch;
+        margin: 18px 0 0;
+        font-size: 1.1rem;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 28px clamp(18px, 5vw, 56px) 56px;
+      }
+      #drop {
+        border: 2px dashed var(--line);
+        border-radius: 14px;
+        padding: 44px 24px;
+      }
+      #drop.over {
+        border-color: var(--brand);
+        background: var(--panel);
+      }
+      #drop b {
+        display: block;
+        margin-bottom: 14px;
+        font:
+          800 1.7rem/1.2 "Bricolage Grotesque",
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      button,
+      select {
+        font: inherit;
+        color: var(--ink);
+      }
+      .btn {
+        background: var(--brand);
+        color: var(--on);
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 20px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      .ghost {
+        background: none;
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        padding: 7px 14px;
+        cursor: pointer;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .seg button {
+        background: none;
+        border: 0;
+        padding: 8px 14px;
+        cursor: pointer;
+      }
+      .seg .on {
+        background: var(--ink);
+        color: var(--bg);
+      }
+      select {
+        background: var(--panel);
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        padding: 9px 12px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .sp {
+        justify-content: space-between;
+      }
+      .sec {
+        border-top: 1.5px solid var(--line);
+        padding: 22px 0;
+      }
+      #fname {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 170px;
+        background: var(--panel);
+        border: 1.5px solid var(--line);
+        border-radius: 10px;
+        cursor: pointer;
+        margin: 14px 0 10px;
+      }
+      #time {
+        font-variant-numeric: tabular-nums;
+        color: var(--mute);
+      }
+      .hint,
+      small {
+        color: var(--mute);
+      }
+      .ctl {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 22px 32px;
+      }
+      .ctl label {
+        display: grid;
+        gap: 4px;
+        font-weight: 600;
+      }
+      .ctl span {
+        display: flex;
+        justify-content: space-between;
+      }
+      .ctl output {
+        font-variant-numeric: tabular-nums;
+        color: var(--brand);
+      }
+      .ctl small {
+        font-weight: 400;
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--brand);
+      }
+      .st {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 16px;
+        margin: 0;
+      }
+      .st dt {
+        color: var(--mute);
+      }
+      .st dd {
+        margin: 0;
+        font:
+          800 1.6rem/1.2 "Bricolage Grotesque",
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      progress {
+        width: 100%;
+        accent-color: var(--brand);
+        margin-top: 14px;
+      }
+      #msg {
+        min-height: 1.5em;
+        margin: 14px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <h1>Tkallem <span class="ar" lang="ar" dir="rtl">تكلّم</span></h1>
+      <p>
+        Drop in a recording and Tkallem cuts out the long pauses. Your audio
+        stays on this device.
+      </p>
+    </header>
+    <main>
+      <div id="drop">
+        <b>Drop an MP3 here</b>
+        <button class="btn" id="pick">Choose a file</button>
+      </div>
+      <input id="file" type="file" accept=".mp3,audio/*" hidden />
+
+      <section id="ws" hidden>
+        <div class="row sp">
+          <span id="fname"></span
+          ><button class="ghost" id="swap">Choose another file</button>
+        </div>
+        <canvas
+          id="wf"
+          aria-label="Audio waveform. Click to move the playhead."
+        ></canvas>
+        <p class="hint" id="legend">
+          Pink areas are the pauses Tkallem will remove.
+        </p>
+        <div class="row">
+          <button class="btn" id="pp">Play</button>
+          <div class="seg">
+            <button data-v="orig" class="on">Original</button
+            ><button data-v="trim">Trimmed</button>
+          </div>
+          <span id="time"></span>
+        </div>
+
+        <div class="sec ctl">
+          <label
+            ><span>Silence level <output id="thv"></output></span
+            ><input
+              id="th"
+              type="range"
+              min="-80"
+              max="-20"
+              step="1"
+              value="-45"
+            /><small
+              >Anything quieter than this counts as silence.</small
+            ></label
+          >
+          <label
+            ><span>Shortest pause to remove <output id="mdv"></output></span
+            ><input
+              id="md"
+              type="range"
+              min="0.2"
+              max="3"
+              step="0.1"
+              value="0.7"
+            /><small>Shorter pauses are left alone.</small></label
+          >
+          <label
+            ><span>Padding at each cut <output id="pdv"></output></span
+            ><input
+              id="pd"
+              type="range"
+              min="0"
+              max="400"
+              step="10"
+              value="150"
+            /><small>Audio kept on each side so words don’t clip.</small></label
+          >
+        </div>
+
+        <div class="sec">
+          <dl class="st">
+            <div>
+              <dt>Original</dt>
+              <dd id="so"></dd>
+            </div>
+            <div>
+              <dt>Trimmed</dt>
+              <dd id="sn"></dd>
+            </div>
+            <div>
+              <dt>Time saved</dt>
+              <dd id="ss"></dd>
+            </div>
+            <div>
+              <dt>Pauses removed</dt>
+              <dd id="sc"></dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="sec row">
+          <select id="fmt" aria-label="Export format">
+            <option value="128">MP3 · 128 kbps</option>
+            <option value="192">MP3 · 192 kbps</option>
+            <option value="wav">WAV · lossless</option>
+          </select>
+          <button class="btn" id="ex">Export trimmed audio</button>
+          <small>Exports are saved as a .zip that holds the audio file.</small>
+        </div>
+        <progress id="pg" max="1" hidden></progress>
+      </section>
+      <p id="msg" role="status" aria-live="polite"></p>
+    </main>
+    <script>
+      const $ = (s) => document.querySelector(s),
+        WIN = 0.01,
+        PK = new WeakMap();
+      let ctx,
+        buf,
+        env,
+        name,
+        regions = [],
+        view = "orig",
+        trimmed,
+        src,
+        t0 = 0,
+        off = 0,
+        playing = false,
+        raf;
+      const fmt = (s) =>
+        Math.floor(s / 60) + ":" + (s % 60).toFixed(1).padStart(4, "0");
+      const human = (s) =>
+        s < 60
+          ? s.toFixed(1) + " s"
+          : Math.floor(s / 60) + " min " + Math.round(s % 60) + " s";
+      const msg = (t) => {
+        $("#msg").textContent = t || "";
+      };
+      const pg = (v) => {
+        const p = $("#pg");
+        p.hidden = v == null;
+        if (v != null) p.value = v;
+      };
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const cur = () => (view === "orig" ? buf : trimmed);
+      const pos = () =>
+        playing ? Math.min(ctx.currentTime - t0, cur().duration) : off;
+
+      function peaks(b) {
+        let p = PK.get(b);
+        if (p) return p;
+        const N = 1600,
+          st = b.length / N;
+        p = new Float32Array(N);
+        for (let c = 0; c < b.numberOfChannels; c++) {
+          const d = b.getChannelData(c);
+          for (let i = 0; i < N; i++) {
+            const a = Math.floor(i * st),
+              e = Math.max(a + 1, Math.floor((i + 1) * st)),
+              k = Math.max(1, (e - a) >> 7);
+            let m = p[i];
+            for (let j = a; j < e; j += k) {
+              const v = Math.abs(d[j]);
+              if (v > m) m = v;
+            }
+            p[i] = m;
+          }
+        }
+        PK.set(b, p);
+        return p;
+      }
+
+      function mkEnv() {
+        const w = Math.round(buf.sampleRate * WIN),
+          n = Math.ceil(buf.length / w);
+        env = new Float32Array(n);
+        for (let c = 0; c < buf.numberOfChannels; c++) {
+          const d = buf.getChannelData(c);
+          for (let i = 0; i < n; i++) {
+            let s = 0;
+            const a = i * w,
+              e = Math.min(a + w, buf.length);
+            for (let j = a; j < e; j++) s += d[j] * d[j];
+            const r = Math.sqrt(s / (e - a));
+            if (r > env[i]) env[i] = r;
+          }
+        }
+      }
+
+      function analyze() {
+        const th = +$("#th").value,
+          md = +$("#md").value,
+          pad = +$("#pd").value / 1e3,
+          D = buf.duration;
+        let s = -1;
+        stopP();
+        regions = [];
+        trimmed = null;
+        off = 0;
+        view = "orig";
+        const add = (a, b) => {
+          if (b - a < md) return;
+          const A = a <= 0 ? 0 : a + pad,
+            B = b >= D - WIN ? D : b - pad;
+          if (B - A > 0.02) regions.push([A, B]);
+        };
+        for (let i = 0; i <= env.length; i++) {
+          const q = i < env.length && 20 * Math.log10(env[i] + 1e-9) < th;
+          if (q && s < 0) s = i;
+          else if (!q && s >= 0) {
+            add(s * WIN, Math.min(i * WIN, D));
+            s = -1;
+          }
+        }
+        const cut = regions.reduce((t, [a, b]) => t + b - a, 0);
+        $("#thv").textContent = "−" + Math.abs(th) + " dB";
+        $("#mdv").textContent = md.toFixed(1) + " s";
+        $("#pdv").textContent = Math.round(pad * 1e3) + " ms";
+        $("#so").textContent = fmt(D);
+        $("#sn").textContent = fmt(D - cut);
+        $("#ss").textContent =
+          human(cut) + " (" + Math.round((cut / D) * 100) + "%)";
+        $("#sc").textContent = regions.length;
+        seg();
+        ui();
+        draw();
+      }
+
+      function build() {
+        if (trimmed) return trimmed;
+        const sr = buf.sampleRate,
+          keep = [];
+        let p = 0;
+        regions.forEach(([a, b]) => {
+          if (a > p) keep.push([p, a]);
+          p = b;
+        });
+        if (p < buf.duration) keep.push([p, buf.duration]);
+        const total = keep.reduce(
+            (t, [a, b]) => t + Math.round((b - a) * sr),
+            0,
+          ),
+          out = ctx.createBuffer(buf.numberOfChannels, Math.max(total, 1), sr),
+          f = Math.round(0.01 * sr);
+        for (let c = 0; c < buf.numberOfChannels; c++) {
+          const d = buf.getChannelData(c),
+            o = out.getChannelData(c);
+          let k = 0;
+          keep.forEach(([a, b], j) => {
+            const i0 = Math.round(a * sr),
+              len = Math.round((b - a) * sr),
+              m = Math.min(f, len >> 1);
+            o.set(d.subarray(i0, i0 + len), k);
+            if (j > 0) for (let i = 0; i < m; i++) o[k + i] *= i / m;
+            if (j < keep.length - 1)
+              for (let i = 0; i < m; i++) o[k + len - 1 - i] *= i / m;
+            k += len;
+          });
+        }
+        return (trimmed = out);
+      }
+
+      function draw() {
+        if (!buf) return;
+        const c = $("#wf"),
+          r = c.getBoundingClientRect(),
+          d = devicePixelRatio || 1,
+          W = (c.width = Math.round(r.width * d)),
+          H = (c.height = Math.round(r.height * d)),
+          g = c.getContext("2d"),
+          cs = getComputedStyle(document.documentElement),
+          b = cur(),
+          p = peaks(b),
+          mx = Math.max(...p) || 1,
+          D = b.duration,
+          h = H / 2,
+          st = Math.max(1, Math.round(d));
+        g.fillStyle = cs.getPropertyValue("--ink");
+        for (let x = 0; x < W; x += st) {
+          const a = Math.max(
+            (p[Math.min(p.length - 1, Math.floor((x / W) * p.length))] / mx) *
+              h *
+              0.92,
+            1,
+          );
+          g.fillRect(x, h - a, st * 0.8, a * 2);
+        }
+        if (view === "orig") {
+          g.fillStyle = cs.getPropertyValue("--cut");
+          g.globalAlpha = 0.3;
+          regions.forEach(([a, e]) =>
+            g.fillRect((a / D) * W, 0, Math.max(1, ((e - a) / D) * W), H),
+          );
+          g.globalAlpha = 1;
+        }
+        g.fillStyle = cs.getPropertyValue("--brand");
+        g.fillRect((pos() / D) * W - d, 0, 2 * d, H);
+      }
+
+      const ui = () => {
+        $("#pp").textContent = playing ? "Pause" : "Play";
+        $("#time").textContent = fmt(pos()) + " / " + fmt(cur().duration);
+        $("#legend").hidden = view !== "orig";
+      };
+      function seg() {
+        document
+          .querySelectorAll(".seg button")
+          .forEach((b) => b.classList.toggle("on", b.dataset.v === view));
+      }
+      function tick() {
+        ui();
+        draw();
+        if (playing) raf = requestAnimationFrame(tick);
+      }
+      async function play() {
+        stopP();
+        await ctx.resume();
+        const b = cur();
+        if (off >= b.duration - 0.05) off = 0;
+        src = ctx.createBufferSource();
+        src.buffer = b;
+        src.connect(ctx.destination);
+        src.onended = () => {
+          if (playing && pos() >= b.duration - 0.1) {
+            playing = false;
+            off = 0;
+            ui();
+            draw();
+          }
+        };
+        src.start(0, off);
+        t0 = ctx.currentTime - off;
+        playing = true;
+        tick();
+      }
+      function stopP() {
+        cancelAnimationFrame(raf);
+        if (playing) off = pos();
+        if (src) {
+          src.onended = null;
+          try {
+            src.stop();
+          } catch {}
+          src = null;
+        }
+        playing = false;
+      }
+
+      async function loadFile(f) {
+        if (!f) return;
+        msg("Reading audio…");
+        await wait(30);
+        try {
+          ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+          stopP();
+          buf = await ctx.decodeAudioData(await f.arrayBuffer());
+          mkEnv();
+        } catch (e) {
+          msg("Couldn’t read that file. Try a different MP3.");
+          return;
+        }
+        name = f.name;
+        $("#fname").textContent = name;
+        $("#drop").hidden = true;
+        $("#ws").hidden = false;
+        msg("");
+        analyze();
+      }
+
+      function wav(b) {
+        const ch = b.numberOfChannels,
+          n = b.length,
+          sr = b.sampleRate,
+          ab = new ArrayBuffer(44 + n * ch * 2),
+          v = new DataView(ab),
+          S = (o, s) =>
+            [...s].forEach((x, i) => v.setUint8(o + i, x.charCodeAt(0)));
+        S(0, "RIFF");
+        v.setUint32(4, 36 + n * ch * 2, true);
+        S(8, "WAVEfmt ");
+        v.setUint32(16, 16, true);
+        v.setUint16(20, 1, true);
+        v.setUint16(22, ch, true);
+        v.setUint32(24, sr, true);
+        v.setUint32(28, sr * ch * 2, true);
+        v.setUint16(32, ch * 2, true);
+        v.setUint16(34, 16, true);
+        S(36, "data");
+        v.setUint32(40, n * ch * 2, true);
+        const D = [...Array(ch).keys()].map((c) => b.getChannelData(c));
+        let o = 44;
+        for (let i = 0; i < n; i++)
+          for (let c = 0; c < ch; c++) {
+            const s = Math.max(-1, Math.min(1, D[c][i]));
+            v.setInt16(o, s < 0 ? s * 32768 : s * 32767, true);
+            o += 2;
+          }
+        return new Uint8Array(ab);
+      }
+
+      async function mp3(b, kbps) {
+        const ch = Math.min(2, b.numberOfChannels),
+          enc = new lamejs.Mp3Encoder(ch, b.sampleRate, kbps),
+          out = [],
+          K = 1152 * 50,
+          q = (x) => {
+            const r = new Int16Array(x.length);
+            for (let i = 0; i < x.length; i++) {
+              const s = Math.max(-1, Math.min(1, x[i]));
+              r[i] = s < 0 ? s * 32768 : s * 32767;
+            }
+            return r;
+          },
+          L = b.getChannelData(0),
+          R = ch > 1 ? b.getChannelData(1) : null;
+        for (let i = 0; i < b.length; i += K) {
+          const l = q(L.subarray(i, i + K)),
+            d = R
+              ? enc.encodeBuffer(l, q(R.subarray(i, i + K)))
+              : enc.encodeBuffer(l);
+          if (d.length) out.push(d);
+          pg(i / b.length);
+          await wait(0);
+        }
+        const e = enc.flush();
+        if (e.length) out.push(e);
+        return new Blob(out);
+      }
+
+      function zip(nm, u) {
+        const T = [];
+        for (let n = 0; n < 256; n++) {
+          let c = n;
+          for (let k = 0; k < 8; k++)
+            c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+          T[n] = c >>> 0;
+        }
+        let r = -1;
+        for (let i = 0; i < u.length; i++) r = T[(r ^ u[i]) & 255] ^ (r >>> 8);
+        r = (r ^ -1) >>> 0;
+        const n = new TextEncoder().encode(nm),
+          L = u.length,
+          P = (dv, l) =>
+            l.forEach(([o, x, z]) =>
+              z == 4 ? dv.setUint32(o, x, true) : dv.setUint16(o, x, true),
+            ),
+          h = new DataView(new ArrayBuffer(30)),
+          c = new DataView(new ArrayBuffer(46)),
+          e = new DataView(new ArrayBuffer(22));
+        P(h, [
+          [0, 0x04034b50, 4],
+          [4, 20, 2],
+          [6, 0x800, 2],
+          [12, 33, 2],
+          [14, r, 4],
+          [18, L, 4],
+          [22, L, 4],
+          [26, n.length, 2],
+        ]);
+        P(c, [
+          [0, 0x02014b50, 4],
+          [4, 20, 2],
+          [6, 20, 2],
+          [8, 0x800, 2],
+          [14, 33, 2],
+          [16, r, 4],
+          [20, L, 4],
+          [24, L, 4],
+          [28, n.length, 2],
+        ]);
+        P(e, [
+          [0, 0x06054b50, 4],
+          [8, 1, 2],
+          [10, 1, 2],
+          [12, 46 + n.length, 4],
+          [16, 30 + n.length + L, 4],
+        ]);
+        return new Blob([h, n, u, c, n, e]);
+      }
+
+      async function exp() {
+        if (!buf) return;
+        const f = $("#fmt").value,
+          btn = $("#ex");
+        btn.disabled = true;
+        try {
+          msg("Preparing audio…");
+          pg(0);
+          await wait(30);
+          const b = build();
+          let blob, ext;
+          if (f === "wav") {
+            blob = new Blob([wav(b)]);
+            ext = "wav";
+          } else {
+            if (!window.lamejs)
+              throw Error("The MP3 encoder didn’t load. Choose WAV instead.");
+            blob = await mp3(b, +f);
+            ext = "mp3";
+          }
+          pg();
+          const base = name.replace(/\.[^.]+$/, "") + "_trimmed",
+            dl = window.claude && (await claude.use("downloads"));
+          if (dl) {
+            await dl.save({
+              filename: base + ".zip",
+              data: zip(
+                base + "." + ext,
+                new Uint8Array(await blob.arrayBuffer()),
+              ),
+            });
+            msg(
+              "Saved " +
+                base +
+                ".zip. Unzip it to get your " +
+                ext.toUpperCase() +
+                " file.",
+            );
+          } else {
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = base + "." + ext;
+            a.click();
+            msg("Exported " + base + "." + ext);
+          }
+        } catch (e) {
+          pg();
+          msg(
+            e && e.code === "declined"
+              ? ""
+              : "Export failed: " + (e.message || e.code),
+          );
+        }
+        btn.disabled = false;
+      }
+
+      ["th", "md", "pd"].forEach(
+        (i) => ($("#" + i).oninput = () => buf && analyze()),
+      );
+      $("#pp").onclick = () => (playing ? (stopP(), ui(), draw()) : play());
+      $("#ex").onclick = exp;
+      $("#pick").onclick = $("#swap").onclick = () => $("#file").click();
+      $("#file").onchange = (e) => loadFile(e.target.files[0]);
+      $("#wf").onclick = (e) => {
+        const r = e.target.getBoundingClientRect(),
+          was = playing;
+        stopP();
+        off =
+          Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) *
+          cur().duration;
+        was ? play() : (ui(), draw());
+      };
+      document.querySelectorAll(".seg button").forEach(
+        (b) =>
+          (b.onclick = async () => {
+            if (b.dataset.v === view) return;
+            stopP();
+            if (b.dataset.v === "trim") {
+              msg("Building trimmed audio…");
+              await wait(30);
+              build();
+              msg("");
+            }
+            view = b.dataset.v;
+            off = 0;
+            seg();
+            ui();
+            draw();
+          }),
+      );
+      addEventListener("dragover", (e) => {
+        e.preventDefault();
+        $("#drop").classList.add("over");
+      });
+      addEventListener("dragleave", () => $("#drop").classList.remove("over"));
+      addEventListener("drop", (e) => {
+        e.preventDefault();
+        $("#drop").classList.remove("over");
+        loadFile(e.dataTransfer.files[0]);
+      });
+      addEventListener("resize", draw);
+      matchMedia("(prefers-color-scheme:dark)").addEventListener(
+        "change",
+        draw,
+      );
+      new MutationObserver(draw).observe(document.documentElement, {
+        attributes: true,
+      });
+    </script>
+  </body>
+</html>
